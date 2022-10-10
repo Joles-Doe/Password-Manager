@@ -29,7 +29,7 @@ def create_message(message, x, y, fontstyle=None):
     return message_rectid
 
 
-def first_time(sourcedirectory):
+def first_time(sourcedirectory): # Checks to see if a key already exists
     keypath = os.path.join(sourcedirectory, 'Data/Key/masterkey')
     try:
         with open(keypath, 'rb') as f:
@@ -46,6 +46,26 @@ def first_time_SETUP(sourcedirectory):
         create_message(f'{text}', 370, 240)
         create_message('NOTE: This password cannot be changed', 370, 370)
         create_message('DO NOT LOSE IT', 370, 410)
+    def last_chance():
+        menu_message(text)
+        create_message('Are you sure you want to make this your password?', 370, 480)
+        message_rectYES = create_message('YES', 310, 560)
+        message_rectNO = create_message('NO', 430, 560)
+        pygame.display.flip()
+        while True:
+            for event in pygame.event.get():
+                mouse = pygame.mouse.get_pos() # mouse
+                if event.type == pygame.MOUSEBUTTONDOWN:
+                    if pygame.mouse.get_pressed()[0]:
+                        if message_rectYES.collidepoint(mouse[0], mouse[1]):
+                            return True
+                        elif message_rectNO.collidepoint(mouse[0], mouse[1]):
+                            return False
+    def add_masterpassword(text):
+        keypath = os.path.join(sourcedirectory, 'Data/Key/masterkey')
+        text = text.encode('utf-8')
+        with open(keypath, 'wb') as f:
+            f.write(text)
     menu = pygame.Surface((screen.get_size()))
     menu.fill((0, 0, 0))
     screen.blit(menu, (0,0))
@@ -58,6 +78,13 @@ def first_time_SETUP(sourcedirectory):
                     if event.key == pygame.K_BACKSPACE:
                         text = text[:-1]
                         menu_message(text)
+                    elif event.key == pygame.K_RETURN:
+                        create_password = last_chance()
+                        if create_password == True:
+                            add_masterpassword(text)
+                            return
+                        else:
+                            menu_message(text)
                     else:
                         text += event.unicode
                         menu_message(text)
@@ -68,3 +95,6 @@ def first_time_SETUP(sourcedirectory):
 new_user = first_time(sourcedirectory)
 if new_user == True:
     first_time_SETUP(sourcedirectory)
+
+
+print('END')
