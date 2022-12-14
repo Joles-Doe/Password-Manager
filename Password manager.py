@@ -252,6 +252,8 @@ def MAIN(sourcedirectory):
                 viewrects.append((viewiconrect, x + topvalue))
                 deleterects.append((deleteiconrect, x + topvalue))
             except IndexError:
+                rectanglerect = pygame.Rect(15, (((x+1)*115)+35), 640, 640)
+                pygame.draw.rect(surface, (30, 30, 30), rectanglerect)
                 break
            
         # surfacehitbox = surface.get_rect()
