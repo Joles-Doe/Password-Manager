@@ -1,9 +1,12 @@
-from cryptography.fernet import Fernet # cryptography is not in python's default packages, so 'pip install cryptography' is needed
 import hashlib
 import pygame # pygame is not in python's default packages, so 'pip install pygame' is needed
 import os
 import sys
+import base64
+from Crypto.Cipher import AES # PyCrypto is not in python's default packages, so 'pip install pycrypto' is needed
+from Crypto import Random # however, PyCrypto needs some sort of C install on your PC (I think), so I've used Cryptodome, which is an alternative that doesn't need you to install anything extra: 'pip install pycryptodome'
 # Imports ^
+
 global sourcedirectory
 sourcedirectory = os.path.dirname(os.path.abspath(__file__)) # Notes the directory of the program
 # [ITEM]path = os.path.join(sourcedirectory, 'Data/[REST OF PATH]')
@@ -21,6 +24,50 @@ iconpath = os.path.join(sourcedirectory, 'Data/Images/lock_icon.png')
 icon = pygame.image.load(iconpath).convert_alpha()
 pygame.display.set_icon(icon)
 # Pygame screen configuration ^
+
+global BLOCK_SIZE
+BLOCK_SIZE = 16
+def pad(string): #packs the argument so that its a multiple of the block size
+    return string + (BLOCK_SIZE - len(string) % BLOCK_SIZE) * chr(BLOCK_SIZE - len(string) % BLOCK_SIZE)
+
+def unpad(string): #unpacks argument
+    return string[:-ord(string[len(string) - 1:])]
+
+def get_key(raw_password):
+    salt = b'*|\x1b\xac\xf6\x803\xb2\xff\xa1\xe3\xe1~2z\xe6\xd4\x88\xc7\x02\t\xf0(7\n&dmF\xfd\x06\xc6' # salt needs to be hardcoded for the AES encryption
+    KEY = hashlib.pbkdf2_hmac(
+        'sha256', # Define the algorithm
+        raw_password.encode('utf-8'), # Converts the given password to bytes
+        salt, # Add thyme
+        100000    
+    )
+    return KEY
+
+def encrypt(stringtoencrypt, raw_password):
+    key = get_key(raw_password)
+    raw = pad(stringtoencrypt)
+    iv = Random.new().read(AES.block_size)
+    cipher = AES.new(key, AES.MODE_CBC, iv)
+    return base64.b64encode(iv + cipher.encrypt(raw.encode('utf-8')))
+
+def decrypt(encryptedstring, raw_password):
+    key = get_key(raw_password)
+    encryptedstring = base64.b64decode(encryptedstring)
+    iv = encryptedstring[:16]
+    cipher = AES.new(key, AES.MODE_CBC, iv)
+    return bytes.decode(unpad(cipher.decrypt(encryptedstring[16:])))
+
+def decrypt_files(entity):
+    entity_upath = os.path.join(sourcedirectory, f'Data/Passwords/{entity}_u')
+    entity_ppath = os.path.join(sourcedirectory, f'Data/Passwords/{entity}_p')
+
+    with open(entity_upath, 'rb') as f:
+        filecontent_u = f.read()
+        filecontent_u = decrypt(filecontent_u, raw_password)
+    with open(entity_ppath, 'rb') as f:
+        filecontent_p = f.read()
+        filecontent_p = decrypt(filecontent_p, raw_password)
+    return [filecontent_u, filecontent_p]
 
 def create_message(message, x, y, fontstyle=None):
     if fontstyle is None:
@@ -111,7 +158,7 @@ def first_time_SETUP(sourcedirectory):
                         create_password = last_chance()
                         if create_password == True:
                             add_masterpassword(text)
-                            return
+                            return text
                         else:
                             change_input(text)
                     else:
@@ -197,12 +244,15 @@ def MAIN(sourcedirectory):
         viewrects = []
         deleterects = []
         for x in range(5):
-            text = nameslist[x + topvalue]
-            rect, editiconrect, viewiconrect, deleteiconrect = drawrectangle(surface, 15, (((x+1)*115)+35), 640, 100, text, color, editicon, viewicon, deleteicon)
-            entityrects.append((rect, x + topvalue))
-            editrects.append((editiconrect, x + topvalue))
-            viewrects.append((viewiconrect, x + topvalue))
-            deleterects.append((deleteiconrect, x + topvalue))
+            try:
+                text = nameslist[x + topvalue]
+                rect, editiconrect, viewiconrect, deleteiconrect = drawrectangle(surface, 15, (((x+1)*115)+35), 640, 100, text, color, editicon, viewicon, deleteicon)
+                entityrects.append((rect, x + topvalue))
+                editrects.append((editiconrect, x + topvalue))
+                viewrects.append((viewiconrect, x + topvalue))
+                deleterects.append((deleteiconrect, x + topvalue))
+            except IndexError:
+                break
            
         # surfacehitbox = surface.get_rect()
         # surface.fill((16, 16, 16)) # outline colour
@@ -215,7 +265,7 @@ def MAIN(sourcedirectory):
 
         screen.blit(surface, (0,0))
         newbox = create_message_topleft('New Entry', 450, 44, fontstyle = pygame.font.SysFont(None, 70)) # <rect(50, 44, 242, 50)>
-        create_message_topleft('Zenyth Inc.', 50, 44, fontstyle = pygame.font.SysFont(None, 70))
+        create_message_topleft('Example name', 50, 44, fontstyle = pygame.font.SysFont(None, 70))
         pygame.display.flip()
         return entityrects, editrects, viewrects, deleterects, newbox.inflate(20, 20)
 
@@ -266,13 +316,12 @@ def MAIN(sourcedirectory):
         fontstyletitle = pygame.font.SysFont(None, 80)
         fontstylebody = pygame.font.SysFont(None, 50)
         entitypath = os.path.join(sourcedirectory, f'Data/Passwords/{account_name}')
-        with open(entitypath, 'r') as f:
-            lines = f.readlines()
-            filelines = [line.rstrip() for line in lines]
-            usernamerect = create_message_topleft(filelines[0], 90, 340, fontstylebody) ########## CHANGE HERE TO DECRYPT FOR READING!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! ##########
-            usernamerectstatic = list(usernamerect.topright)
-            passwordrect = create_message_topleft(filelines[1], 90, 520, fontstylebody)
-            passwordrectstatic = list(passwordrect.topright)
+
+        filelines = decrypt_files(account_name)
+        usernamerect = create_message_topleft(filelines[0], 90, 340, fontstylebody)
+        usernamerectstatic = list(usernamerect.topright)
+        passwordrect = create_message_topleft(filelines[1], 90, 520, fontstylebody)
+        passwordrectstatic = list(passwordrect.topright)
 
         surface = pygame.Surface((650, 565))
         surfaceinvisiblerect = pygame.Rect(45, 150, 650, 565) 
@@ -326,7 +375,7 @@ def MAIN(sourcedirectory):
 
 
     def edit_entity(account_name):
-        def change_file(entitypath, filelines, linechange, textrect):
+        def change_file(account_name, filelines, linechange, textrect):
             def change_text(text, drawover, textrectstatic):
                 pygame.draw.rect(screen, (90, 90, 90), drawover)
                 create_message_topleft(text, textrectstatic[0], textrectstatic[1], fontstyle = pygame.font.SysFont(None, 50))
@@ -354,22 +403,26 @@ def MAIN(sourcedirectory):
             
             filelines[linechange] = text
             #edit text file
+            if linechange == 0:
+                entitypath = os.path.join(sourcedirectory, f'Data/Passwords/{account_name}_u')
+            elif linechange == 1:
+                entitypath = os.path.join(sourcedirectory, f'Data/Passwords/{account_name}_p')
+
             with open(entitypath, 'wb') as f:
-                f.write((filelines[0] + '\n' + filelines[1]).encode('utf-8'))  ########## CHANGE HERE ASWELL FOR ENCRYPTION!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! ##########
+                entity_encrypt = encrypt(filelines[linechange], raw_password)
+                f.write(entity_encrypt)
             pygame.draw.rect(screen, (90, 90, 90), addedtext)
             pygame.display.flip()
             return filelines
 
         fontstyletitle = pygame.font.SysFont(None, 80)
         fontstylebody = pygame.font.SysFont(None, 50)
-        entitypath = os.path.join(sourcedirectory, f'Data/Passwords/{account_name}')
-        with open(entitypath, 'r') as f:
-            lines = f.readlines()
-            filelines = [line.rstrip() for line in lines]
-            usernamerect = create_message_topleft(filelines[0], 90, 340, fontstylebody)
-            usernamerectstatic = list(usernamerect.topright)
-            passwordrect = create_message_topleft(filelines[1], 90, 520, fontstylebody)
-            passwordrectstatic = list(passwordrect.topright)   ########## CHANGE HERE TO DECRYPT FOR READING!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! ##########
+
+        filelines = decrypt_files(account_name)
+        usernamerect = create_message_topleft(filelines[0], 90, 340, fontstylebody)
+        usernamerectstatic = list(usernamerect.topright)
+        passwordrect = create_message_topleft(filelines[1], 90, 520, fontstylebody)
+        passwordrectstatic = list(passwordrect.topright)
         
         surface = pygame.Surface((650, 565))
         surfaceinvisiblerect = pygame.Rect(45, 150, 650, 565) 
@@ -403,21 +456,34 @@ def MAIN(sourcedirectory):
                         if exitrect.collidepoint((mousepos[0] - 45), (mousepos[1] - 150)):
                             return
                         if usernamerect.collidepoint(mousepos[0], mousepos[1]):
-                            filelines = change_file(entitypath, filelines, 0, usernamerect)
+                            filelines = change_file(account_name, filelines, 0, usernamerect)
                         if passwordrect.collidepoint(mousepos[0], mousepos[1]):
-                            filelines = change_file(entitypath, filelines, 1, passwordrect)
+                            filelines = change_file(account_name, filelines, 1, passwordrect)
                             edit_entity(account_name)
                 if event.type == pygame.QUIT:
                     pygame.quit()
                     sys.exit()
 
     def addnew_entity():
-        def addto_files(enteredlist, listpath, entitypath):
+        def addto_files(enteredlist, listpath):
+            # entitypath = os.path.join(sourcedirectory, f'Data/Passwords/{enteredlist[0]}')
+            user_path = os.path.join(sourcedirectory, f'Data/Passwords/{enteredlist[0]}_u')
+            pass_path = os.path.join(sourcedirectory, f'Data/Passwords/{enteredlist[0]}_p')
+            # with open(entitypath, 'wb') as f:
+            #     f.write((enteredlist[1] + '\n' + enteredlist[2]).encode('utf-8'))
+            u_encrypted = encrypt(enteredlist[1], raw_password)
+            p_encrypted = encrypt(enteredlist[2], raw_password)
+            with open(user_path, 'wb') as f:
+                f.write(u_encrypted)
+            with open(pass_path, 'wb') as f:
+                f.write(p_encrypted)
 
-            with open(entitypath, 'wb') as f:
-                f.write((enteredlist[1] + '\n' + enteredlist[2]).encode('utf-8'))
-            with open(listpath, 'ab') as f:
-                f.write(('\n' + enteredlist[0]).encode('utf-8'))
+            if os.path.getsize(listpath) == 0:
+                with open(listpath, 'a') as f:
+                    f.write((enteredlist[0]))
+            else:
+                with open(listpath, 'a') as f:
+                    f.write(('\n' + enteredlist[0]))
         def change_text(text, changequestion):
             if changequestion == True:
                 changerect = pygame.Rect(50, 260, 640, 210)
@@ -465,8 +531,7 @@ def MAIN(sourcedirectory):
                     elif event.key == pygame.K_RETURN:
                         if choose == 2:
                             enteredlist.append(text)
-                            print(enteredlist)
-                            addto_files(enteredlist, listpath = os.path.join(sourcedirectory, 'Data/List/names.txt'), entitypath = os.path.join(sourcedirectory, f'Data/Passwords/{enteredlist[0]}'))
+                            addto_files(enteredlist, listpath = os.path.join(sourcedirectory, 'Data/List/names.txt'))
                             return
                         else:
                             choose += 1
@@ -496,7 +561,8 @@ def MAIN(sourcedirectory):
         fontstylebody = pygame.font.SysFont(None, 50) 
 
         listpath = os.path.join(sourcedirectory, 'Data/List/names.txt')
-        entitypath = os.path.join(sourcedirectory, f'Data/Passwords/{account_name}')
+        entitypath_u = os.path.join(sourcedirectory, f'Data/Passwords/{account_name}_u')
+        entitypath_p = os.path.join(sourcedirectory, f'Data/Passwords/{account_name}_p')
 
         surfacehitbox = surface.get_rect()
         surface.fill((16, 16, 16)) # outline colour
@@ -531,9 +597,10 @@ def MAIN(sourcedirectory):
                                 accounts = f.read().split('\n')
                                 f.seek(0)
                                 f.truncate()
-                                accounts = [account for account in accounts if account and account != account_name] # ¯\_(ツ)_/¯ thanks meic
+                                accounts = [account for account in accounts if account and account != account_name]
                                 f.write('\n'.join(accounts))
-                            os.remove(entitypath) #bye bye
+                            os.remove(entitypath_u) #bye bye
+                            os.remove(entitypath_p)
                             return
 
                 if event.type == pygame.QUIT:
@@ -617,12 +684,11 @@ def encryption_file(credentialsarray):
         100000
     )
 
-
+global raw_password
 new_user = first_time(sourcedirectory)
 if new_user == True:
-    first_time_SETUP(sourcedirectory)
+    raw_password = first_time_SETUP(sourcedirectory)
 else:
-    global raw_password
-    # raw_password = LOGIN(sourcedirectory)
+    raw_password = LOGIN(sourcedirectory)
 MAIN(sourcedirectory)
 
