@@ -139,6 +139,9 @@ def first_time_SETUP(sourcedirectory):
             100000
             )
         SaltPassword = salt + KEY
+
+        if not os.path.exists(os.path.join(sourcedirectory, 'Data/Key')):
+            os.makedirs(os.path.join(sourcedirectory, 'Data/Key'))
         with open(keypath, 'wb') as f:
             f.write(SaltPassword)
 
@@ -196,7 +199,6 @@ def LOGIN(sourcedirectory):
     create_message('Please enter your master password', 370, 130)
     textrect = pygame.Rect((0, 200), (740, 200))
 
-    print('password = TEST_123999!!!#')
     while True:
         pygame.display.flip()
         for event in pygame.event.get():
@@ -267,7 +269,7 @@ def MAIN(sourcedirectory):
 
         screen.blit(surface, (0,0))
         newbox = create_message_topleft('New Entry', 450, 44, fontstyle = pygame.font.SysFont(None, 70)) # <rect(50, 44, 242, 50)>
-        create_message_topleft('Example name', 50, 44, fontstyle = pygame.font.SysFont(None, 70))
+        create_message_topleft('PassKeeper', 50, 44, fontstyle = pygame.font.SysFont(None, 70))
         pygame.display.flip()
         return entityrects, editrects, viewrects, deleterects, newbox.inflate(20, 20)
 
@@ -469,6 +471,8 @@ def MAIN(sourcedirectory):
     def addnew_entity():
         def addto_files(enteredlist, listpath):
             # entitypath = os.path.join(sourcedirectory, f'Data/Passwords/{enteredlist[0]}')
+            if not os.path.exists(os.path.join(sourcedirectory, 'Data/Passwords')):
+                os.makedirs(os.path.join(sourcedirectory, 'Data/Passwords'))
             user_path = os.path.join(sourcedirectory, f'Data/Passwords/{enteredlist[0]}_u')
             pass_path = os.path.join(sourcedirectory, f'Data/Passwords/{enteredlist[0]}_p')
             # with open(entitypath, 'wb') as f:
